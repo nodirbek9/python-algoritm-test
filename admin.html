@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AIFU Test — Admin</title><meta name="robots" content="noindex">
+<link rel="icon" type="image/png" href="assets/logo.png">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+<header class="top"><div class="top-in"><div class="brand"><img src="assets/logo.png" alt="AIFU"><div><b>Admin panel</b><small>Algoritmlarni loyihalash — test natijalari</small></div></div><div class="grow"></div><button class="btn ghost hidden" id="out">Chiqish</button></div></header>
+<main class="wrap" id="app"></main>
+<script src="config.js"></script>
+<script>
+(function(){
+const app=document.getElementById('app'); let pw=''; try{pw=sessionStorage.getItem('adm')||''}catch(e){}
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const api=async b=>{try{const r=await fetch(CONFIG.API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({adminPassword:pw},b))});return await r.json()}catch(e){return {error:'NET'}}};
+const fmt=t=>t?new Date(Number(t)).toLocaleString('uz-UZ',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
+function login(msg){document.getElementById('out').classList.add('hidden');app.innerHTML=`<div class="card" style="max-width:420px;margin:40px auto"><h2>Admin paroli</h2>${msg?'<div class="alert">'+esc(msg)+'</div>':''}<form id="f"><div class="field"><input class="inp" id="p" type="password" placeholder="Parol" autofocus></div><button class="btn pri full">Kirish</button></form></div>`;
+ document.getElementById('f').onsubmit=async e=>{e.preventDefault();pw=document.getElementById('p').value;await load(true)}}
+async function load(first){
+ const r=await api({action:'admin_list'});
+ if(r.error==='WRONG_PASSWORD'){pw='';return login(first?"Parol noto'g'ri":'')}
+ if(r.error){app.innerHTML='<div class="card">Xato: '+esc(r.error)+'</div>';return}
+ try{sessionStorage.setItem('adm',pw)}catch(e){}
+ document.getElementById('out').classList.remove('hidden');
+ const done=r.list.filter(x=>x.status==='finished'||x.status==='expired'),pass=done.filter(x=>x.score>=18).length;
+ const rp=r.report, left=rp.firstFinishedAt?Math.max(0,rp.firstFinishedAt+864e5-Date.now()):null;
+ app.innerHTML=`<div class="kpis"><div><b>${r.students}</b><small>Talabalar (kirgan)</small></div><div><b>${done.length}</b><small>Tugatgan urinishlar</small></div><div><b>${r.avg}</b><small>O'rtacha ball</small></div><div><b>${done.length?Math.round(pass*100/done.length):0}%</b><small>≥18 ball</small></div></div>
+ <div class="card"><div class="acts" style="margin:0 0 14px"><b>Hisobot:</b> ${rp.sentAt?'<span class="pill ok">Yuborilgan: '+esc(rp.sentAt)+'</span>':'<span class="pill act">Kutilmoqda: '+rp.done+'/'+rp.expected+' talaba'+(left!==null?', '+Math.floor(left/36e5)+' soat '+Math.floor(left%36e5/6e4)+' daq qoldi':'')+'</span>'}<span class="sp"></span>
+ <button class="btn ghost" id="rf">↻ Yangilash</button><button class="btn nav" id="dl">⬇ Excel yuklab olish</button><button class="btn pri" id="sr">✉ Hisobotni hozir yuborish</button></div>
+ <div style="overflow:auto;max-height:65vh"><table class="t"><thead><tr><th>№</th><th>FIO</th><th>Guruh</th><th>Urinish</th><th>Ball</th><th>Holat</th><th>Boshlangan</th><th>Tugagan</th><th>Tab</th><th></th></tr></thead><tbody>${r.list.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x.fio)}</td><td>${esc(x.group)}</td><td>${x.attempt}</td><td><b>${x.score===''?'—':x.score}</b></td><td>${x.status==='active'?'<span class="pill act">ishlamoqda</span>':x.status==='void'?'<span class="pill no">bekor</span>':x.score>=18?'<span class="pill ok">o\'tdi</span>':'<span class="pill no">o\'tmadi</span>'}</td><td>${fmt(x.startedAt)}</td><td>${fmt(x.finishedAt)}</td><td>${x.tabs||0}</td><td>${x.status==='void'?'':'<button class="btn ghost" style="padding:4px 10px;min-height:0;font-size:12px" data-v="'+x.id+'">Bekor qilish</button>'}</td></tr>`).join('')}</tbody></table></div></div>`;
+ document.getElementById('rf').onclick=()=>load();
+ document.getElementById('sr').onclick=async()=>{if(!confirm('Excel hisobotini '+'kamoliddin.ru1@gmail.com'+' ga hozir yuborasizmi?'))return;const x=await api({action:'admin_send_report'});alert(x.ok?'Yuborildi':'Xato: '+x.error);load()};
+ document.getElementById('dl').onclick=async()=>{const x=await api({action:'admin_download'});if(x.error)return alert('Xato: '+x.error);const a=document.createElement('a');a.href='data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,'+x.b64;a.download=x.name;a.click()};
+ app.querySelectorAll('[data-v]').forEach(b=>b.onclick=async()=>{if(!confirm("Bu urinishni bekor qilasizmi? (talaba qaytadan kira oladi)"))return;await api({action:'admin_void',id:b.dataset.v});load()});
+}
+document.getElementById('out').onclick=()=>{try{sessionStorage.removeItem('adm')}catch(e){}pw='';login()};
+pw?load(true):login();
+setInterval(()=>{if(pw&&!document.querySelector('.modal'))load()},30000);
+})();
+</script>
+</body></html>
